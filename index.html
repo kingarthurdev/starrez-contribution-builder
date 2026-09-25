@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contribution Script Builder</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f5f3; --surface: #ffffff; --text: #1d1b19; --muted: #6b665f; --border: #e2ded8;
+    --accent: #bf5700; --accent-text: #ffffff; --accent-soft: #fbeee5;
+    --ok: #2f7d4f; --ok-soft: #e6f3eb; --warn: #9a6100; --warn-soft: #fcf3dc; --bad: #b3261e; --bad-soft: #fbe9e7;
+    --code-bg: #1f1d1b; --code-text: #f1ede7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151413; --surface: #1f1d1b; --text: #eeeae4; --muted: #a39d94; --border: #36322e;
+      --accent: #e0701f; --accent-text: #1a0f06; --accent-soft: #3a2415;
+      --ok: #6cc28f; --ok-soft: #1b3025; --warn: #e6b450; --warn-soft: #362a12; --bad: #f08b80; --bad-soft: #3b1c19;
+      --code-bg: #0f0e0d; --code-text: #eeeae4;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .lede { color: var(--muted); margin: 0 0 28px; max-width: 70ch; }
+  section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  section h2 { font-size: 15px; margin: 0 0 14px; display: flex; align-items: center; gap: 10px; }
+  .step { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--accent-text); font-size: 12px; font-weight: 700; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px 18px; }
+  label.field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 600; }
+  label.field small { font-weight: 400; color: var(--muted); }
+  input[type=text], input[type=number], select, textarea {
+    font: inherit; font-weight: 400; color: var(--text); background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; width: 100%;
+  }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .drop { border: 2px dashed var(--border); border-radius: 10px; padding: 28px 16px; text-align: center; cursor: pointer; color: var(--muted); }
+  .drop.over, .drop:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .drop strong { color: var(--text); }
+  .drop input { display: none; }
+  .filemeta { margin-top: 10px; font-size: 13px; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg label { padding: 8px 14px; cursor: pointer; font-size: 13px; font-weight: 600; }
+  .seg input { display: none; }
+  .seg label:has(input:checked) { background: var(--accent); color: var(--accent-text); }
+  .summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .pill { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+  .tablewrap { overflow: auto; max-height: 420px; border: 1px solid var(--border); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { position: sticky; top: 0; background: var(--surface); font-weight: 600; white-space: nowrap; }
+  td.notes { max-width: 340px; color: var(--muted); }
+  tr.excluded td { opacity: 0.55; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+  button { font: inherit; font-weight: 600; font-size: 14px; border-radius: 8px; padding: 9px 16px; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  textarea.code { font: 12px/1.45 ui-monospace, "Cascadia Code", Consolas, monospace; background: var(--code-bg); color: var(--code-text); min-height: 260px; resize: vertical; border: none; }
+  ol.howto { margin: 0; padding-left: 20px; }
+  ol.howto li { margin-bottom: 4px; }
+  code { font: 12.5px ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+  .hidden { display: none !important; }
+  .note { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+  .callout { font-size: 13px; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); margin-top: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Contribution Script Builder</h1>
+  <p class="lede">Upload a sheet of residents and conversation notes. This page builds a script you paste into the console of a logged-in StarRez tab. The script creates one Contribution/Interaction per resident. Your sheet stays in this browser tab and isn't uploaded anywhere.</p>
+
+  <section>
+    <h2><span class="step">1</span>Upload sheet</h2>
+    <label class="drop" id="drop">
+      <input type="file" id="file" accept=".xlsx,.xls,.csv">
+      <strong>Choose an .xlsx or .csv file</strong> or drop it here
+    </label>
+    <div class="filemeta" id="filemeta"></div>
+    <label class="field hidden" id="sheetPick" style="margin-top:12px;max-width:260px">Sheet
+      <select id="sheet"></select>
+    </label>
+  </section>
+
+  <section id="mapSection" class="hidden">
+    <h2><span class="step">2</span>Match columns</h2>
+    <div class="grid" id="mapGrid"></div>
+    <p class="note">Every row with a UTEID and notes gets one contribution, dated at the time the script runs.</p>
+  </section>
+
+  <section id="settingsSection" class="hidden">
+    <h2><span class="step">3</span>Contribution settings</h2>
+    <div class="grid">
+      <label class="field">Assigned to
+        <input type="text" id="assignee" placeholder="EID, e.g. abc123">
+        <small>An EID or StarRez user ID. Leave it blank to assign to whoever runs the script.</small>
+      </label>
+      <label class="field">Interaction type
+        <select id="type"></select>
+      </label>
+      <label class="field">Sub type
+        <select id="subtype"></select>
+      </label>
+      <label class="field">Room location
+        <select id="location"></select>
+      </label>
+      <label class="field">Skip these UTEIDs
+        <input type="text" id="skip" placeholder="abc123, xyz789">
+        <small>Comma or space separated</small>
+      </label>
+      <label class="field">Pause between residents (ms)
+        <input type="number" id="delay" value="750" min="0" step="250">
+      </label>
+    </div>
+  </section>
+
+  <section id="previewSection" class="hidden">
+    <h2><span class="step">4</span>Review rows</h2>
+    <div class="summary" id="summary"></div>
+    <div class="tablewrap"><table id="preview"></table></div>
+  </section>
+
+  <section id="outputSection" class="hidden">
+    <h2><span class="step">5</span>Get the script</h2>
+    <div class="seg" role="radiogroup" aria-label="Mode">
+      <label><input type="radio" name="mode" value="dry" checked>Dry run</label>
+      <label><input type="radio" name="mode" value="live">Submit for real</label>
+    </div>
+    <p class="note" id="modeNote"></p>
+    <div class="actions">
+      <button class="primary" id="copy">Copy script</button>
+      <button id="download">Download .js</button>
+    </div>
+    <textarea class="code" id="output" readonly spellcheck="false"></textarea>
+    <h2 style="margin-top:18px">How to run it</h2>
+    <ol class="howto">
+      <li>Open <code>utaustin.starrezhousing.com</code> and log in. Any StarRez page works, for example the directory.</li>
+      <li>Press <code>F12</code> and open the <b>Console</b> tab. You may need to type <code>allow pasting</code> first.</li>
+      <li>Paste the script and press Enter. Start with <b>Dry run</b>. It only looks up each student and shows what it would submit.</li>
+      <li>Switch to <b>Submit for real</b>, copy the script again, and run it. It remembers every student and note it has submitted from this browser, so running it again, even a rebuilt script, won't create duplicates.</li>
+    </ol>
+  </section>
+</main>
+
+<!-- The script pasted into StarRez. Placeholders __X__ are filled in by buildScript(). -->
+<script type="text/plain" id="runner-template">
+// StarRez Contribution/Interaction submitter
+// Generated __GENERATED_AT__ · batch __BATCH_ID__ · __COUNT__ residents · __MODE_LABEL__
+// Paste into the DevTools console of a logged-in StarRez tab (utaustin.starrezhousing.com).
+(async () => {
+  const DRY_RUN = __DRY_RUN__;
+  const CONFIG = __CONFIG__;
+  const ROWS = __ROWS__;
+
+  const tag = ["%c[contributions]", "color:#bf5700;font-weight:bold"];
+  const log = (...a) => console.log(...tag, ...a);
+  const fail = (...a) => console.error(...tag, ...a);
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  if (!/starrezhousing\.com$/.test(location.hostname)) return fail("Run this from a logged-in StarRez tab (utaustin.starrezhousing.com).");
+  const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+  if (!token) return fail("No __RequestVerificationToken on this page. Open the StarRez directory, reload, and paste again.");
+
+  const headers = {
+    "__requestverificationtoken": token,
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "content-type": "application/json; charset=UTF-8",
+    "x-requested-with": "XMLHttpRequest",
+  };
+  const request = async (method, url, body) => {
+    const res = await fetch(url, { method, credentials: "include", headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const text = await res.text();
+    if (!res.ok) throw new Error(`${url.split("?")[0]} → HTTP ${res.status}: ${text.slice(0, 200)}`);
+    return text;
+  };
+  const postJSON = async (url, body) => {
+    const text = await request("POST", url, body);
+    let json;
+    try { json = JSON.parse(text); } catch { throw new Error(`${url} returned non-JSON (logged out?): ${text.slice(0, 200)}`); }
+    if (!json.Success) throw new Error(`${url} was rejected: ${text.slice(0, 300)}`);
+    return json;
+  };
+  const parse = (text) => new DOMParser().parseFromString(text, "text/html");
+  const norm = (s) => String(s ?? "").trim().toLowerCase();
+
+  // Remember every (student, note, type) this browser already submitted, so re-running never duplicates,
+  // even from a rebuilt script. Stored in this StarRez tab's localStorage.
+  const doneKey = "starrez-contributions-submitted";
+  const loadDone = () => { try { return JSON.parse(localStorage.getItem(doneKey) || "{}"); } catch { return {}; } };
+  const saveDone = (d) => { try { localStorage.setItem(doneKey, JSON.stringify(d)); } catch {} };
+  const done = loadDone();
+
+  // UTEID -> Entry, using the same search the "Participants" picker uses.
+  const findEntry = async (row) => {
+    const text = await request("POST", "/StarRezWeb/StarRezWeb/EntrySearch/GetSearchResults", {
+      parameters: {
+        HtmlID: Math.random().toString(16).slice(2).padEnd(32, "0").slice(0, 32),
+        SearchItems: JSON.stringify({ "Entry_Name|RoomSpace_Description|ID1": row.uteid }),
+        DBObjectName: "EntrySummary", MaxRecords: "500", Parameters: "{}", MultipleSelect: false, SelectedIDs: [],
+      },
+    });
+    const cell = (tr, name) => tr.querySelector(`[data-name="${name}"]`)?.textContent.trim() ?? "";
+    let hits = [...parse(text).querySelectorAll("tr[data-id]")].filter((tr) => norm(cell(tr, "ID1")) === norm(row.uteid));
+    if (hits.length > 1) {
+      const inRoom = hits.filter((tr) => cell(tr, "EntryStatusEnum_Abbreviation") === "INRM");
+      if (inRoom.length) hits = inRoom;
+    }
+    if (!hits.length) throw new Error(`no StarRez entry with UTEID ${row.uteid}`);
+    if (hits.length > 1) throw new Error(`${hits.length} entries match UTEID ${row.uteid}; submit this one by hand`);
+    const tr = hits[0];
+    return { entryID: Number(tr.dataset.id), starrezName: tr.dataset.caption || "", room: cell(tr, "RoomSpace_Description"), status: cell(tr, "EntryStatusEnum_Abbreviation") };
+  };
+
+  const pad = (n) => String(n).padStart(2, "0");
+  const now = new Date();
+  const runDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:00.000`;
+
+  // ---- 1. Look up every student (read-only) ----
+  const todo = ROWS.filter((r) => !done[r.key]);
+  if (todo.length < ROWS.length) log(`${ROWS.length - todo.length} already submitted from this browser; skipping them:`, ROWS.filter((r) => done[r.key]).map((r) => `${r.uteid} → contribution ${done[r.key]}`));
+  if (!todo.length) return log("Nothing left to submit.");
+  log(`Looking up ${todo.length} students…`);
+  const lookupErrors = [];
+  for (const r of todo) {
+    try {
+      Object.assign(r, await findEntry(r));
+    } catch (e) { r.error = e.message; lookupErrors.push(r); }
+  }
+  console.table(todo.map((r) => ({ uteid: r.uteid, starrezName: r.starrezName || "", entryID: r.entryID || "", room: r.room || "", status: r.status || "", problem: r.error || "" })));
+  if (lookupErrors.length) {
+    fail(`${lookupErrors.length} students couldn't be found. Fix them in the sheet or add them to the skip list, then rebuild the script:`, lookupErrors.map((r) => `${r.uteid}: ${r.error}`));
+    if (!DRY_RUN) return fail("Nothing was submitted.");
+  }
+
+  const handler = { _error: { _autoFix: false, _autoIgnore: false } };
+  const newBody = (r) => ({
+    vm: {
+      __ChangedFields: ["ContributionDate", "ReportNumber", "Description", "ContributionTypeID", "ContributionSubTypeID", "SelectedEntries", "EntryID"],
+      ContributionDate: runDate,
+      ReportNumber: "",
+      Description: r.notes + "\r\n",
+      ContributionTypeID: String(CONFIG.typeID),
+      ContributionSubTypeID: CONFIG.subtypeID,
+      SelectedEntries: String(r.entryID),
+      EntryID: String(r.entryID),
+    },
+    handler,
+  });
+  const editBody = (id, r, assigneeID) => {
+    const vm = { __ChangedFields: ["RoomLocationID", "Description", "Comments"], RoomLocationID: CONFIG.locationID, Description: r.notes + "\r\n", Comments: r.notes + "\r\n" };
+    if (assigneeID) { vm.__ChangedFields.push("AssignedTo_SecurityUserID"); vm.AssignedTo_SecurityUserID = assigneeID; }
+    return { id, vm, handler };
+  };
+
+  if (DRY_RUN) {
+    const sample = todo.find((r) => r.entryID);
+    if (sample) log("Sample requests for the first student:", newBody(sample), editBody("<new id>", sample, CONFIG.assignee ? "<resolved on first submit>" : null));
+    log(`Dry run done: ${todo.length - lookupErrors.length} ready, ${lookupErrors.length} not found. Check the StarRez names in the table above. Nothing was submitted.` +
+      (CONFIG.assignee ? ` The "Assigned to" user (${CONFIG.assignee}) is checked when the first real record is created.` : ""));
+    return;
+  }
+
+  // ---- 2. Submit ----
+  // The Assigned To list only exists on a contribution's edit form, so it's resolved from the first record created.
+  let assignee = null;
+  const resolveAssignee = async (contributionID) => {
+    const doc = parse(await request("GET", `/StarRezWeb/CampusLife/ContributionMain/EditData?id=${contributionID}&_=${Date.now()}`));
+    const opts = [...doc.querySelectorAll('select[name="AssignedTo_SecurityUserID"] option')];
+    const want = norm(CONFIG.assignee);
+    const hit = opts.find((o) => (/^\d+$/.test(want) ? o.value === want : norm(o.textContent).endsWith(`(${want})`)));
+    if (!hit) throw new Error(`"${CONFIG.assignee}" isn't in StarRez's Assigned To list (${opts.length} users checked)`);
+    const label = hit.textContent.trim();
+    return { id: Number(hit.value), label, marker: label.match(/\([^)]+\)\s*$/)?.[0] ?? label };
+  };
+
+  const results = [];
+  for (const [i, r] of todo.entries()) {
+    const at = `[${i + 1}/${todo.length}] ${r.starrezName || r.uteid}`;
+    let contributionID = null;
+    try {
+      contributionID = (await postJSON("/StarRezWeb/CampusLife/Contribution/New", newBody(r))).Data;
+      done[r.key] = contributionID; saveDone(done);
+      if (CONFIG.assignee && !assignee) {
+        assignee = await resolveAssignee(contributionID);
+        log(`Assigning to ${assignee.label} (user ${assignee.id})`);
+      }
+      await postJSON("/StarRezWeb/CampusLife/ContributionMain/EditData", editBody(contributionID, r, assignee?.id));
+      if (assignee) {
+        const shown = await request("GET", `/StarRezWeb/CampusLife/ContributionMain/Show?id=${contributionID}&_=${Date.now()}`);
+        if (!shown.includes(assignee.marker)) throw new Error(`saved, but Assigned To isn't ${assignee.label}. Check it in StarRez`);
+      }
+      results.push({ uteid: r.uteid, name: r.starrezName, contributionID, status: "ok" });
+      log(`${at} → contribution ${contributionID}`);
+    } catch (e) {
+      results.push({ uteid: r.uteid, name: r.starrezName, contributionID, status: "FAILED: " + e.message });
+      fail(`${at} FAILED`, e.message);
+      fail(contributionID
+        ? `Contribution ${contributionID} was created but not fully updated. Fix it by hand in StarRez. Re-running won't create it again.`
+        : "Nothing was created for this student.");
+      fail("Stopping so you can check. Run the script again to continue with the remaining students.");
+      break;
+    }
+    await sleep(CONFIG.delayMs);
+  }
+
+  console.table(results);
+  window.__contributionResults = results;
+  const ok = results.filter((r) => r.status === "ok").length;
+  log(`Submitted ${ok} of ${todo.length}.`);
+  try {
+    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = ["UTEID,Name,ContributionID,Status", ...results.map((r) => [r.uteid, r.name, r.contributionID, r.status].map(esc).join(","))].join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = `contributions-${CONFIG.batchId}.csv`;
+    a.click();
+  } catch {}
+})();
+</script>
+
+<script>
+// Option IDs from the StarRez Contribution edit form.
+const TYPES = { 1: "Intentional Conversation - Fall", 2: "Intentional Conversation - Spring", 3: "Intentional Conversation - Summer" };
+const SUBTYPES = { 1: "Initial Interaction", 2: "Meaningful Conversation", 3: "Ongoing Support/Follow-up" };
+const LOCATIONS = { 0: "(Unallocated)", 42: "2400 Nueces Apts", 30: "Andrews", 25: "Blanton", 31: "Brackenridge", 37: "Brackenridge Apts",
+  26: "Carothers", 39: "Colorado Apts", 27: "Creekside", 43: "Dobie", 24: "Duren", 44: "East Campus Graduate Apts", 38: "Gateway Apts",
+  41: "Jasper Park- Brackenridge", 40: "Jester Center-East", 23: "Jester Center-West", 32: "Kinsolving", 28: "Littlefield", 29: "Moore Hill",
+  33: "Prather", 45: "Residence Halls", 34: "Roberts", 35: "San Jacinto Hall", 46: "University Apartments" };
+
+// Column roles: key, label, header-guess regex
+const ROLES = [
+  ["uteid", "UTEID", /^(ut)?e?id$|uteid|^eid/i],
+  ["notes", "Notes", /note|description|comment/i],
+];
+
+const $ = (id) => document.getElementById(id);
+const state = { workbook: null, fileName: "", headers: [], rows: [], built: [] };
+
+function fillSelect(sel, entries, value) {
+  sel.innerHTML = entries.map(([v, t]) => `<option value="${v}">${escapeHtml(t)}</option>`).join("");
+  if (value !== undefined) sel.value = value;
+}
+function escapeHtml(s) { return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+const norm = (s) => String(s ?? "").trim().toLowerCase();
+
+fillSelect($("type"), Object.entries(TYPES), "1");
+fillSelect($("subtype"), Object.entries(SUBTYPES), "1");
+fillSelect($("location"), Object.entries(LOCATIONS).sort((a, b) => a[1].localeCompare(b[1])), "23");
+
+// ---- File loading ----
+const drop = $("drop");
+["dragover", "dragenter"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, () => drop.classList.remove("over")));
+drop.addEventListener("drop", (e) => { e.preventDefault(); if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+$("file").addEventListener("change", (e) => e.target.files[0] && loadFile(e.target.files[0]));
+
+async function loadFile(file) {
+  const buf = await file.arrayBuffer();
+  const isCsv = /\.csv$/i.test(file.name);
+  try {
+    // CSVs stay as raw text so notes/IDs aren't reinterpreted.
+    state.workbook = XLSX.read(buf, { type: "array", raw: isCsv, codepage: 65001 });
+  } catch (err) {
+    $("filemeta").textContent = `Couldn't read ${file.name}: ${err.message}`;
+    return;
+  }
+  state.fileName = file.name;
+  const names = state.workbook.SheetNames;
+  fillSelect($("sheet"), names.map((n) => [n, n]), names[0]);
+  $("sheetPick").classList.toggle("hidden", names.length < 2);
+  loadSheet(names[0]);
+}
+$("sheet").addEventListener("change", (e) => loadSheet(e.target.value));
+
+function loadSheet(name) {
+  const ws = state.workbook.Sheets[name];
+  const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: true, blankrows: false });
+  const headerIdx = grid.findIndex((r) => r.filter((c) => String(c).trim()).length >= 2);
+  state.headers = (grid[headerIdx] || []).map((h, i) => String(h).trim() || `Column ${i + 1}`);
+  state.rows = grid.slice(headerIdx + 1).filter((r) => r.some((c) => String(c).trim()));
+  $("filemeta").textContent = `${state.fileName}: ${state.rows.length} rows, ${state.headers.length} columns`;
+  buildMapping();
+  ["mapSection", "settingsSection", "previewSection", "outputSection"].forEach((id) => $(id).classList.remove("hidden"));
+  refresh();
+}
+
+function buildMapping() {
+  const used = new Set();
+  $("mapGrid").innerHTML = ROLES.map(([key, label]) => `<label class="field">${label}<select data-role="${key}"></select></label>`).join("");
+  for (const [key, , re] of ROLES) {
+    const sel = document.querySelector(`[data-role="${key}"]`);
+    const opts = [["", "Choose a column…"], ...state.headers.map((h, i) => [i, h])];
+    fillSelect(sel, opts);
+    // Prefer exact-ish header matches, and don't give one column two roles.
+    const guess = state.headers.findIndex((h, i) => !used.has(i) && re.test(h));
+    if (guess >= 0) { sel.value = guess; used.add(guess); }
+    sel.addEventListener("change", refresh);
+  }
+}
+
+const pad = (n) => String(n).padStart(2, "0");
+function parseAssignee(v) {
+  const s = String(v).trim();
+  if (!s) return "";
+  const paren = s.match(/\(([^)]+)\)\s*$/);
+  return (paren ? paren[1] : s).trim();
+}
+
+// ---- Build rows + preview ----
+function col(key) {
+  const v = document.querySelector(`[data-role="${key}"]`)?.value;
+  return v === "" || v == null ? null : +v;
+}
+
+function refresh() {
+  if (!state.rows.length) return;
+  const c = Object.fromEntries(ROLES.map(([k]) => [k, col(k)]));
+  const skip = new Set(String($("skip").value).split(/[\s,;]+/).map(norm).filter(Boolean));
+  const get = (r, k) => (c[k] == null ? "" : r[c[k]] ?? "");
+  const seen = new Map();
+
+  state.built = state.rows.map((r, i) => {
+    const out = { line: i + 2, uteid: String(get(r, "uteid")).trim(), notes: String(get(r, "notes")).trim(), issues: [], include: true };
+    if (!out.uteid) { out.include = false; out.issues.push(["bad", "no UTEID"]); }
+    else if (skip.has(norm(out.uteid))) { out.include = false; out.issues.push(["skip", "in skip list"]); }
+    else if (!out.notes) { out.include = false; out.issues.push(["bad", "no notes"]); }
+    if (out.include) {
+      const k = norm(out.uteid);
+      if (seen.has(k)) out.issues.push(["warn", `same UTEID as row ${seen.get(k)}; both will be submitted`]);
+      else seen.set(k, out.line);
+    }
+    return out;
+  });
+
+  renderPreview(c);
+  renderScript();
+}
+
+function renderPreview(c) {
+  const rows = state.built;
+  const inc = rows.filter((r) => r.include);
+  const warns = inc.filter((r) => r.issues.some(([t]) => t === "warn")).length;
+  const skipped = rows.filter((r) => r.issues.some(([t]) => t === "skip")).length;
+  const bad = rows.filter((r) => !r.include && !r.issues.some(([t]) => t === "skip")).length;
+  const missing = ROLES.filter(([k]) => c[k] == null).map(([, l]) => l);
+  $("summary").innerHTML =
+    (missing.length ? `<span class="pill bad">Choose a column for ${missing.join(" and ")}</span>` : "") +
+    `<span class="pill ok">${inc.length} will be submitted</span>` +
+    (warns ? `<span class="pill warn">${warns} with warnings</span>` : "") +
+    (skipped ? `<span class="pill">${skipped} skipped</span>` : "") +
+    (bad ? `<span class="pill bad">${bad} excluded</span>` : "");
+
+  $("preview").innerHTML = `<thead><tr><th>Row</th><th>UTEID</th><th>Notes</th><th>Status</th></tr></thead><tbody>` +
+    rows.map((r) => {
+      const status = r.issues.length
+        ? r.issues.map(([t, m]) => `<span class="pill ${t === "skip" ? "" : t}">${escapeHtml(m)}</span>`).join(" ")
+        : `<span class="pill ok">ready</span>`;
+      return `<tr class="${r.include ? "" : "excluded"}"><td>${r.line}</td><td>${escapeHtml(r.uteid)}</td>` +
+        `<td class="notes">${escapeHtml(r.notes.length > 200 ? r.notes.slice(0, 200) + "…" : r.notes)}</td><td>${status}</td></tr>`;
+    }).join("") + "</tbody>";
+}
+
+function mode() { return document.querySelector('input[name="mode"]:checked').value; }
+
+function renderScript() {
+  const c = Object.fromEntries(ROLES.map(([k]) => [k, col(k)]));
+  const ready = c.uteid != null && c.notes != null;
+  const rows = state.built.filter((r) => r.include).map((r) => {
+    return { key: hash([r.uteid.toLowerCase(), r.notes, $("type").value]), uteid: r.uteid, notes: r.notes };
+  });
+  const dry = mode() === "dry";
+  $("modeNote").textContent = dry
+    ? "Only looks up each student in StarRez and prints what it would submit. Nothing is created."
+    : `Creates ${rows.length} contributions in StarRez.`;
+  $("copy").disabled = $("download").disabled = !ready || !rows.length;
+  if (!ready || !rows.length) { $("output").value = ""; return; }
+
+  const config = {
+    batchId: batchId(rows),
+    typeID: +$("type").value,
+    subtypeID: +$("subtype").value,
+    locationID: +$("location").value,
+    assignee: parseAssignee($("assignee").value) || null,
+    delayMs: Math.max(0, +$("delay").value || 0),
+  };
+  const now = new Date();
+  const fill = {
+    __GENERATED_AT__: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`,
+    __BATCH_ID__: config.batchId,
+    __COUNT__: String(rows.length),
+    __MODE_LABEL__: dry ? "DRY RUN (nothing is submitted)" : "LIVE (creates records)",
+    __DRY_RUN__: String(dry),
+    __CONFIG__: JSON.stringify(config),
+    __ROWS__: JSON.stringify(rows, null, 2).replace(/\n/g, "\n  "),
+  };
+  $("output").value = $("runner-template").textContent.trim().replace(/__[A-Z_]+__/g, (k) => fill[k] ?? k);
+}
+
+const batchId = (rows) => hash(rows.map((r) => r.key));
+function hash(v) {
+  const s = JSON.stringify(v);
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(36);
+}
+
+["assignee", "type", "subtype", "location", "skip", "delay"].forEach((id) => $(id).addEventListener("input", refresh));
+document.querySelectorAll('input[name="mode"]').forEach((el) => el.addEventListener("change", renderScript));
+
+$("copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("output").value); }
+  catch { $("output").select(); document.execCommand("copy"); }
+  $("copy").textContent = "Copied";
+  setTimeout(() => ($("copy").textContent = "Copy script"), 1500);
+});
+$("download").addEventListener("click", () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([$("output").value], { type: "text/javascript" }));
+  a.download = `starrez-contributions-${mode() === "dry" ? "dry-run" : "live"}.js`;
+  a.click();
+});
+</script>
+</body>
+</html>
