@@ -224,19 +224,26 @@
   const todo = ROWS.filter((r) => !done[r.key]);
   if (todo.length < ROWS.length) log(`${ROWS.length - todo.length} already submitted from this browser; skipping them:`, ROWS.filter((r) => done[r.key]).map((r) => `${r.uteid} → contribution ${done[r.key]}`));
   if (!todo.length) return log("Nothing left to submit.");
-  log(`Looking up ${todo.length} students in StarRez…`);
+  // Lookups are read-only, so run several at once. A failed request is retried once before counting as an error.
+  const LOOKUP_CONCURRENCY = 10;
+  log(`Looking up ${todo.length} students in StarRez, ${LOOKUP_CONCURRENCY} at a time…`);
   const lookupErrors = [];
   const lookupStart = Date.now();
-  for (const [i, r] of todo.entries()) {
-    const at = `Lookup ${i + 1}/${todo.length}:`;
-    try {
-      Object.assign(r, await findEntry(r));
-      log(`${at} ${r.uteid} → ${r.starrezName} (${r.room})`);
-    } catch (e) {
-      r.error = e.message; lookupErrors.push(r);
-      fail(`${at} ${r.uteid} → ${e.message}`);
+  let next = 0, finished = 0;
+  const lookupWorker = async () => {
+    while (next < todo.length) {
+      const r = todo[next++];
+      try {
+        try { Object.assign(r, await findEntry(r)); }
+        catch (e) { if (/^no StarRez entry|entries match/.test(e.message)) throw e; await sleep(1000); Object.assign(r, await findEntry(r)); }
+        log(`Lookup ${++finished}/${todo.length}: ${r.uteid} → ${r.starrezName} (${r.room})`);
+      } catch (e) {
+        r.error = e.message; lookupErrors.push(r);
+        fail(`Lookup ${++finished}/${todo.length}: ${r.uteid} → ${e.message}`);
+      }
     }
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(LOOKUP_CONCURRENCY, todo.length) }, lookupWorker));
   log(`Lookups done in ${Math.round((Date.now() - lookupStart) / 1000)}s: ${todo.length - lookupErrors.length} found, ${lookupErrors.length} not found.`);
   console.table(todo.map((r) => ({ uteid: r.uteid, starrezName: r.starrezName || "", entryID: r.entryID || "", room: r.room || "", status: r.status || "", problem: r.error || "" })));
   if (lookupErrors.length) {
