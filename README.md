@@ -14,8 +14,10 @@ The sheet is read entirely in your browser. Nothing is uploaded, and the page ha
 
 1. Open the page and upload your sheet. Pick the UTEID and Notes columns.
 2. Set **Assigned to** (an EID; leave it blank to assign to yourself), the interaction type, sub type and room location. Optionally, list UTEIDs to skip.
-3. Copy the **Dry run** script and paste it into the console of a logged-in StarRez tab (F12, then Console). It only looks up each student and prints what it would submit. Check the StarRez names it shows.
-4. Switch to **Submit for real**, copy the script again, and run it.
+3. Copy the script and paste it into the console of a logged-in StarRez tab (F12, then Console). By default it submits for real: it looks up every UTEID first and stops before creating anything if one isn't found. Then it creates the contributions and downloads a results CSV.
+4. If it stops partway, run the same script again. It picks up where it left off.
+
+To preview without creating anything, choose **Dry run** before copying. It prints what it would submit, with each student's name from StarRez.
 
 ## What the script does
 

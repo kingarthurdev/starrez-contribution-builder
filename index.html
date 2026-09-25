@@ -127,8 +127,8 @@
   <section id="outputSection" class="hidden">
     <h2><span class="step">5</span>Get the script</h2>
     <div class="seg" role="radiogroup" aria-label="Mode">
-      <label><input type="radio" name="mode" value="dry" checked>Dry run</label>
-      <label><input type="radio" name="mode" value="live">Submit for real</label>
+      <label><input type="radio" name="mode" value="live" checked>Submit for real</label>
+      <label><input type="radio" name="mode" value="dry">Dry run</label>
     </div>
     <p class="note" id="modeNote"></p>
     <div class="actions">
@@ -140,8 +140,9 @@
     <ol class="howto">
       <li>Open <code>utaustin.starrezhousing.com</code> and log in. Any StarRez page works, for example the directory.</li>
       <li>Press <code>F12</code> and open the <b>Console</b> tab. You may need to type <code>allow pasting</code> first.</li>
-      <li>Paste the script and press Enter. Start with <b>Dry run</b>. It only looks up each student and shows what it would submit.</li>
-      <li>Switch to <b>Submit for real</b>, copy the script again, and run it. It remembers every student and note it has submitted from this browser, so running it again, even a rebuilt script, won't create duplicates.</li>
+      <li>Paste the script and press Enter. It first looks up every UTEID in StarRez. If any aren't found, it stops before creating anything. Otherwise it creates the contributions one at a time, then downloads a results CSV.</li>
+      <li>If it stops partway, run the same script again. It remembers every student and note it has submitted from this browser, so it continues with the rest and won't create duplicates.</li>
+      <li>To preview first, choose <b>Dry run</b> above. It looks up each student and prints what it would submit, with each student's name from StarRez, and creates nothing.</li>
     </ol>
   </section>
 </main>
