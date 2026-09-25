@@ -23,7 +23,8 @@
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   main { max-width: 1040px; margin: 0 auto; padding: 32px 16px 64px; }
-  h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.01em; display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; }
+  .version { font-size: 12px; font-weight: 600; letter-spacing: 0; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 9px; }
   .lede { color: var(--muted); margin: 0 0 28px; max-width: 70ch; }
   section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
   section h2 { font-size: 15px; margin: 0 0 14px; display: flex; align-items: center; gap: 10px; }
@@ -71,7 +72,7 @@
 </head>
 <body>
 <main>
-  <h1>Contribution Script Builder</h1>
+  <h1>Contribution Script Builder <span class="version" id="version" title="Bump VERSION in the page script with every change"></span></h1>
   <p class="lede">Upload a sheet of residents and conversation notes. This page builds a script you paste into the console of a logged-in StarRez tab. The script creates one Contribution/Interaction per resident. Your sheet stays in this browser tab and isn't uploaded anywhere.</p>
 
   <section>
@@ -150,7 +151,7 @@
 <!-- The script pasted into StarRez. Placeholders __X__ are filled in by buildScript(). -->
 <script type="text/plain" id="runner-template">
 // StarRez Contribution/Interaction submitter
-// Generated __GENERATED_AT__ · batch __BATCH_ID__ · __COUNT__ residents · __MODE_LABEL__
+// Builder v__VERSION__ · generated __GENERATED_AT__ · batch __BATCH_ID__ · __COUNT__ residents · __MODE_LABEL__
 // Paste into the DevTools console of a logged-in StarRez tab (utaustin.starrezhousing.com).
 (async () => {
   const DRY_RUN = __DRY_RUN__;
@@ -226,7 +227,7 @@
   if (!todo.length) return log("Nothing left to submit.");
   // Lookups are read-only, so run several at once. A failed request is retried once before counting as an error.
   const LOOKUP_CONCURRENCY = 10;
-  log(`Looking up ${todo.length} students in StarRez, ${LOOKUP_CONCURRENCY} at a time…`);
+  log(`Script from builder v__VERSION__. Looking up ${todo.length} students in StarRez, ${LOOKUP_CONCURRENCY} at a time…`);
   const lookupErrors = [];
   const lookupStart = Date.now();
   let next = 0, finished = 0;
@@ -339,6 +340,10 @@
 
 <script>
 // Option IDs from the StarRez Contribution edit form.
+// Bump on every change so it's obvious when GitHub Pages is serving the new build.
+const VERSION = "1.4.0";
+document.getElementById("version").textContent = "v" + VERSION;
+
 const TYPES = { 1: "Intentional Conversation - Fall", 2: "Intentional Conversation - Spring", 3: "Intentional Conversation - Summer" };
 const SUBTYPES = { 1: "Initial Interaction", 2: "Meaningful Conversation", 3: "Ongoing Support/Follow-up" };
 const LOCATIONS = { 0: "(Unallocated)", 42: "2400 Nueces Apts", 30: "Andrews", 25: "Blanton", 31: "Brackenridge", 37: "Brackenridge Apts",
@@ -504,6 +509,7 @@ function renderScript() {
   };
   const now = new Date();
   const fill = {
+    __VERSION__: VERSION,
     __GENERATED_AT__: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`,
     __BATCH_ID__: config.batchId,
     __COUNT__: String(rows.length),
