@@ -266,9 +266,12 @@
 
   const ENTRY_RULE = "Contribution Entry Required";
   const handler = (ignore) => ({ _error: { _autoFix: false, _autoIgnore: false, ...(ignore ? { ignore } : {}) } });
+  // Room Location is a "configured field" on StarRez's New form, and it must be set there or StarRez answers
+  // "Room Location Required". The form posts it under this JSON-in-quotes key, both directly and in __ConfiguredFieldsValues.
+  const LOCATION_KEY = `'${JSON.stringify({ ColumnName: "RoomLocationID", DbObjectName: "Contribution", ChildColumn: null, ChildColumnValue: null })}'`;
   const newBody = (r, ignore) => ({
     vm: {
-      __ChangedFields: ["ContributionDate", "ReportNumber", "Description", "ContributionTypeID", "ContributionSubTypeID", "SelectedEntries", "EntryID"],
+      __ChangedFields: ["ContributionDate", "ReportNumber", "Description", "ContributionTypeID", "ContributionSubTypeID", "SelectedEntries", "EntryID", LOCATION_KEY],
       ContributionDate: runDate,
       ReportNumber: "",
       Description: r.notes + "\r\n",
@@ -276,6 +279,8 @@
       ContributionSubTypeID: CONFIG.subtypeID,
       SelectedEntries: String(r.entryID),
       EntryID: String(r.entryID),
+      [LOCATION_KEY]: CONFIG.locationID,
+      __ConfiguredFieldsValues: { [LOCATION_KEY]: CONFIG.locationID },
     },
     handler: handler(ignore),
   });
@@ -379,7 +384,7 @@
 <script>
 // Option IDs from the StarRez Contribution edit form.
 // Bump on every change so it's obvious when GitHub Pages is serving the new build.
-const VERSION = "1.5.1";
+const VERSION = "1.5.2";
 document.getElementById("version").textContent = "v" + VERSION;
 
 const TYPES = { 1: "Intentional Conversation - Fall", 2: "Intentional Conversation - Spring", 3: "Intentional Conversation - Summer" };
