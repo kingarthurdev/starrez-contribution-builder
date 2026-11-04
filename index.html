@@ -37,7 +37,7 @@
     border-radius: 8px; padding: 8px 10px; width: 100%;
   }
   input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .drop { border: 2px dashed var(--border); border-radius: 10px; padding: 28px 16px; text-align: center; cursor: pointer; color: var(--muted); }
+  .drop { display: block; border: 2px dashed var(--border); border-radius: 10px; padding: 28px 16px; text-align: center; cursor: pointer; color: var(--muted); }
   .drop.over, .drop:hover { border-color: var(--accent); background: var(--accent-soft); }
   .drop strong { color: var(--text); }
   .drop input { display: none; }
@@ -379,7 +379,7 @@
 <script>
 // Option IDs from the StarRez Contribution edit form.
 // Bump on every change so it's obvious when GitHub Pages is serving the new build.
-const VERSION = "1.5.0";
+const VERSION = "1.5.1";
 document.getElementById("version").textContent = "v" + VERSION;
 
 const TYPES = { 1: "Intentional Conversation - Fall", 2: "Intentional Conversation - Spring", 3: "Intentional Conversation - Summer" };
