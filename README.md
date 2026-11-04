@@ -2,7 +2,7 @@
 
 A single-page tool for logging Intentional Conversations in UT Austin's StarRez in bulk.
 
-Upload a spreadsheet (.xlsx or .csv) with a UTEID column and a notes column. The page builds a script you paste into the DevTools console of a logged-in StarRez tab. The script creates one Contribution/Interaction for each resident.
+Upload a spreadsheet (.xlsx or .csv) with a UTEID column and a notes column. You can also add a location comments column. The page builds a script you paste into the DevTools console of a logged-in StarRez tab. The script creates one Contribution/Interaction for each resident.
 
 **Live page:** https://kingarthurdev.github.io/starrez-contribution-builder/
 
@@ -12,8 +12,8 @@ The sheet is read entirely in your browser. Nothing is uploaded, and the page ha
 
 ## Using it
 
-1. Open the page and upload your sheet. Pick the UTEID and Notes columns.
-2. Set **Assigned to** (an EID; leave it blank to assign to yourself), the interaction type, sub type and room location. Optionally, list UTEIDs to skip.
+1. Open the page and upload your sheet. Pick the UTEID and Notes columns. Optionally, pick a Location comments column (for example, "Jester Upper West - 12th Floor Study Room"). StarRez keeps up to 100 characters.
+2. Set **Assigned to** (an EID; leave it blank to assign to yourself), the interaction type, sub type (defaults to Meaningful Conversation) and room location. Optionally, list UTEIDs to skip.
 3. Copy the script and paste it into the console of a logged-in StarRez tab (F12, then Console). By default it submits for real: it looks up every UTEID first and stops before creating anything if one isn't found. Then it creates the contributions and downloads a results CSV.
 4. If it stops partway, run the same script again. It picks up where it left off.
 
@@ -24,8 +24,9 @@ To preview without creating anything, choose **Dry run** before copying. It prin
 For each row it:
 
 1. Finds the student's StarRez entry by UTEID (`EntrySearch/GetSearchResults`).
-2. Creates the contribution (`CampusLife/Contribution/New`) with the date, type, sub type, notes and student.
-3. Sets Room Location, Comments and Assigned To (`CampusLife/ContributionMain/EditData`). If an assignee is set, it then checks the record's page to confirm the assignment saved.
+2. Creates the contribution (`CampusLife/Contribution/New`) with the date, type, sub type, notes (as Description) and student. StarRez answers with an ignorable "Contribution Entry Required" warning. The script resends with that warning ignored, but only if it's the only warning and it names the student being attached.
+3. Sets Room Location, Location Comments and Assigned To (`CampusLife/ContributionMain/EditData`).
+4. Opens the record's page to confirm the student is attached and, if an assignee is set, that the assignment saved.
 
 ## Safety
 

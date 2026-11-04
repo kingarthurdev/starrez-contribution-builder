@@ -67,13 +67,25 @@
   code { font: 12.5px ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
   .hidden { display: none !important; }
   .note { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+  .news { font-size: 13px; padding: 12px 14px; border-radius: 10px; background: var(--accent-soft); border: 1px solid var(--border); margin: 0 0 16px; }
+  .news ul { margin: 6px 0 0; padding-left: 20px; }
   .callout { font-size: 13px; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); margin-top: 12px; }
 </style>
 </head>
 <body>
 <main>
   <h1>Contribution Script Builder <span class="version" id="version" title="Bump VERSION in the page script with every change"></span></h1>
-  <p class="lede">Upload a sheet of residents and conversation notes. This page builds a script you paste into the console of a logged-in StarRez tab. The script creates one Contribution/Interaction per resident. Your sheet stays in this browser tab and isn't uploaded anywhere.</p>
+  <p class="lede">Upload a sheet of residents and conversation notes, plus optional location comments. This page builds a script you paste into the console of a logged-in StarRez tab. The script creates one Contribution/Interaction per resident. Your sheet stays in this browser tab and isn't uploaded anywhere.</p>
+
+  <div class="news">
+    <strong>New in v1.5</strong>
+    <ul>
+      <li><b>Location comments:</b> StarRez now has a Location Comments field (for example, "Jester Upper West - 12th Floor Study Room"). Add a column for it to your sheet and choose it in step 2. It's optional, and StarRez keeps up to 100 characters.</li>
+      <li><b>Sub type</b> now defaults to Meaningful Conversation.</li>
+      <li>Notes now go only into Description. They're no longer copied into Comments.</li>
+      <li>StarRez now shows a "Contribution Entry Required" warning on every new contribution. The script ignores it only when the warning names the student it attached, then checks the saved record to confirm the student is on it.</li>
+    </ul>
+  </div>
 
   <section>
     <h2><span class="step">1</span>Upload sheet</h2>
@@ -90,7 +102,7 @@
   <section id="mapSection" class="hidden">
     <h2><span class="step">2</span>Match columns</h2>
     <div class="grid" id="mapGrid"></div>
-    <p class="note">Every row with a UTEID and notes gets one contribution, dated at the time the script runs.</p>
+    <p class="note">Every row with a UTEID and notes gets one contribution, dated at the time the script runs. If you choose a Location comments column, each row's text goes into that contribution's Location Comments field. Rows with an empty cell leave the field blank.</p>
   </section>
 
   <section id="settingsSection" class="hidden">
@@ -246,14 +258,15 @@
   };
   await Promise.all(Array.from({ length: Math.min(LOOKUP_CONCURRENCY, todo.length) }, lookupWorker));
   log(`Lookups done in ${Math.round((Date.now() - lookupStart) / 1000)}s: ${todo.length - lookupErrors.length} found, ${lookupErrors.length} not found.`);
-  console.table(todo.map((r) => ({ uteid: r.uteid, starrezName: r.starrezName || "", entryID: r.entryID || "", room: r.room || "", status: r.status || "", problem: r.error || "" })));
+  console.table(todo.map((r) => ({ uteid: r.uteid, starrezName: r.starrezName || "", entryID: r.entryID || "", room: r.room || "", status: r.status || "", locationComments: r.locationComments || "", problem: r.error || "" })));
   if (lookupErrors.length) {
     fail(`${lookupErrors.length} students couldn't be found. Fix them in the sheet or add them to the skip list, then rebuild the script:`, lookupErrors.map((r) => `${r.uteid}: ${r.error}`));
     if (!DRY_RUN) return fail("Nothing was submitted.");
   }
 
-  const handler = { _error: { _autoFix: false, _autoIgnore: false } };
-  const newBody = (r) => ({
+  const ENTRY_RULE = "Contribution Entry Required";
+  const handler = (ignore) => ({ _error: { _autoFix: false, _autoIgnore: false, ...(ignore ? { ignore } : {}) } });
+  const newBody = (r, ignore) => ({
     vm: {
       __ChangedFields: ["ContributionDate", "ReportNumber", "Description", "ContributionTypeID", "ContributionSubTypeID", "SelectedEntries", "EntryID"],
       ContributionDate: runDate,
@@ -264,12 +277,38 @@
       SelectedEntries: String(r.entryID),
       EntryID: String(r.entryID),
     },
-    handler,
+    handler: handler(ignore),
   });
   const editBody = (id, r, assigneeID) => {
-    const vm = { __ChangedFields: ["RoomLocationID", "Description", "Comments"], RoomLocationID: CONFIG.locationID, Description: r.notes + "\r\n", Comments: r.notes + "\r\n" };
+    const vm = { __ChangedFields: ["RoomLocationID", "Description"], RoomLocationID: CONFIG.locationID, Description: r.notes + "\r\n" };
+    if (r.locationComments) { vm.__ChangedFields.push("LocationComments"); vm.LocationComments = r.locationComments; }
     if (assigneeID) { vm.__ChangedFields.push("AssignedTo_SecurityUserID"); vm.AssignedTo_SecurityUserID = assigneeID; }
-    return { id, vm, handler };
+    return { id, vm, handler: handler() };
+  };
+
+  // StarRez answers a new contribution with an ignorable "Contribution Entry Required" warning (HTTP 400)
+  // even when the student is attached. Its UI offers an Ignore button. This clicks it for you, but only when that
+  // is the only warning and it names the student we attached. After saving, the record page is checked too.
+  const createContribution = async (r) => {
+    const url = "/StarRezWeb/CampusLife/Contribution/New";
+    const send = async (ignore) => {
+      const res = await fetch(url, { method: "POST", credentials: "include", headers, body: JSON.stringify(newBody(r, ignore)) });
+      const text = await res.text();
+      let json;
+      try { json = JSON.parse(text); } catch { throw new Error(`${url} → HTTP ${res.status}, non-JSON (logged out?): ${text.slice(0, 200)}`); }
+      return { ok: res.ok, status: res.status, json, text };
+    };
+    const name = norm(r.starrezName);
+    const namesStudent = (item) => !!name && (norm(item) === name || norm(item).startsWith(name + " "));
+    let out = await send();
+    if (!out.ok && Array.isArray(out.json)) {
+      const blocking = out.json.filter((w) => !(w.rulename === ENTRY_RULE && String(w.canignore) === "true" && namesStudent(w.item)));
+      if (blocking.length) throw new Error(`StarRez refused it: ${blocking.map((w) => w.rulename + (w.item ? ` (${w.item})` : "")).join("; ")}`);
+      out = await send([ENTRY_RULE]);
+    }
+    if (!out.ok) throw new Error(`${url} → HTTP ${out.status}: ${out.text.slice(0, 300)}`);
+    if (!out.json?.Success) throw new Error(`${url} was rejected: ${out.text.slice(0, 300)}`);
+    return out.json.Data;
   };
 
   if (DRY_RUN) {
@@ -298,17 +337,16 @@
     const at = `[${i + 1}/${todo.length}] ${r.starrezName || r.uteid}`;
     let contributionID = null;
     try {
-      contributionID = (await postJSON("/StarRezWeb/CampusLife/Contribution/New", newBody(r))).Data;
+      contributionID = await createContribution(r);
       done[r.key] = contributionID; saveDone(done);
       if (CONFIG.assignee && !assignee) {
         assignee = await resolveAssignee(contributionID);
         log(`Assigning to ${assignee.label} (user ${assignee.id})`);
       }
       await postJSON("/StarRezWeb/CampusLife/ContributionMain/EditData", editBody(contributionID, r, assignee?.id));
-      if (assignee) {
-        const shown = await request("GET", `/StarRezWeb/CampusLife/ContributionMain/Show?id=${contributionID}&_=${Date.now()}`);
-        if (!shown.includes(assignee.marker)) throw new Error(`saved, but Assigned To isn't ${assignee.label}. Check it in StarRez`);
-      }
+      const shown = await request("GET", `/StarRezWeb/CampusLife/ContributionMain/Show?id=${contributionID}&_=${Date.now()}`);
+      if (!parse(shown).querySelector(`[data-name="EntryID"][data-id="${r.entryID}"]`)) throw new Error(`saved, but ${r.starrezName} isn't listed on it. Check it in StarRez`);
+      if (assignee && !shown.includes(assignee.marker)) throw new Error(`saved, but Assigned To isn't ${assignee.label}. Check it in StarRez`);
       results.push({ uteid: r.uteid, name: r.starrezName, contributionID, status: "ok" });
       log(`${at} → contribution ${contributionID}`);
     } catch (e) {
@@ -341,7 +379,7 @@
 <script>
 // Option IDs from the StarRez Contribution edit form.
 // Bump on every change so it's obvious when GitHub Pages is serving the new build.
-const VERSION = "1.4.0";
+const VERSION = "1.5.0";
 document.getElementById("version").textContent = "v" + VERSION;
 
 const TYPES = { 1: "Intentional Conversation - Fall", 2: "Intentional Conversation - Spring", 3: "Intentional Conversation - Summer" };
@@ -351,11 +389,14 @@ const LOCATIONS = { 0: "(Unallocated)", 42: "2400 Nueces Apts", 30: "Andrews", 2
   41: "Jasper Park- Brackenridge", 40: "Jester Center-East", 23: "Jester Center-West", 32: "Kinsolving", 28: "Littlefield", 29: "Moore Hill",
   33: "Prather", 45: "Residence Halls", 34: "Roberts", 35: "San Jacinto Hall", 46: "University Apartments" };
 
-// Column roles: key, label, header-guess regex
+// Column roles: key, label, header-guess regex, optional
 const ROLES = [
-  ["uteid", "UTEID", /^(ut)?e?id$|uteid|^eid/i],
-  ["notes", "Notes", /note|description|comment/i],
+  ["uteid", "UTEID", /^(ut)?e?id$|uteid|^eid/i, false],
+  ["notes", "Notes", /^(?!.*locat).*(note|description|comment)/i, false],
+  ["locationComments", "Location comments", /locat/i, true],
 ];
+const REQUIRED = ROLES.filter((r) => !r[3]);
+const LOCATION_COMMENT_MAX = 100; // StarRez's Location Comments field holds 100 characters
 
 const $ = (id) => document.getElementById(id);
 const state = { workbook: null, fileName: "", headers: [], rows: [], built: [] };
@@ -368,7 +409,7 @@ function escapeHtml(s) { return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&"
 const norm = (s) => String(s ?? "").trim().toLowerCase();
 
 fillSelect($("type"), Object.entries(TYPES), "1");
-fillSelect($("subtype"), Object.entries(SUBTYPES), "1");
+fillSelect($("subtype"), Object.entries(SUBTYPES), "2");
 fillSelect($("location"), Object.entries(LOCATIONS).sort((a, b) => a[1].localeCompare(b[1])), "23");
 
 // ---- File loading ----
@@ -410,10 +451,11 @@ function loadSheet(name) {
 
 function buildMapping() {
   const used = new Set();
-  $("mapGrid").innerHTML = ROLES.map(([key, label]) => `<label class="field">${label}<select data-role="${key}"></select></label>`).join("");
-  for (const [key, , re] of ROLES) {
+  $("mapGrid").innerHTML = ROLES.map(([key, label, , optional]) =>
+    `<label class="field">${label}${optional ? " <small>optional</small>" : ""}<select data-role="${key}"></select></label>`).join("");
+  for (const [key, , re, optional] of ROLES) {
     const sel = document.querySelector(`[data-role="${key}"]`);
-    const opts = [["", "Choose a column…"], ...state.headers.map((h, i) => [i, h])];
+    const opts = [["", optional ? "None" : "Choose a column…"], ...state.headers.map((h, i) => [i, h])];
     fillSelect(sel, opts);
     // Prefer exact-ish header matches, and don't give one column two roles.
     const guess = state.headers.findIndex((h, i) => !used.has(i) && re.test(h));
@@ -444,7 +486,8 @@ function refresh() {
   const seen = new Map();
 
   state.built = state.rows.map((r, i) => {
-    const out = { line: i + 2, uteid: String(get(r, "uteid")).trim(), notes: String(get(r, "notes")).trim(), issues: [], include: true };
+    const out = { line: i + 2, uteid: String(get(r, "uteid")).trim(), notes: String(get(r, "notes")).trim(),
+      locationComments: String(get(r, "locationComments")).trim().replace(/\s+/g, " "), issues: [], include: true };
     if (!out.uteid) { out.include = false; out.issues.push(["bad", "no UTEID"]); }
     else if (skip.has(norm(out.uteid))) { out.include = false; out.issues.push(["skip", "in skip list"]); }
     else if (!out.notes) { out.include = false; out.issues.push(["bad", "no notes"]); }
@@ -452,6 +495,10 @@ function refresh() {
       const k = norm(out.uteid);
       if (seen.has(k)) out.issues.push(["warn", `same UTEID as row ${seen.get(k)}; both will be submitted`]);
       else seen.set(k, out.line);
+      if (out.locationComments.length > LOCATION_COMMENT_MAX) {
+        out.issues.push(["warn", `location comment is ${out.locationComments.length} characters; only the first ${LOCATION_COMMENT_MAX} are kept`]);
+        out.locationComments = out.locationComments.slice(0, LOCATION_COMMENT_MAX).trim();
+      }
     }
     return out;
   });
@@ -466,7 +513,8 @@ function renderPreview(c) {
   const warns = inc.filter((r) => r.issues.some(([t]) => t === "warn")).length;
   const skipped = rows.filter((r) => r.issues.some(([t]) => t === "skip")).length;
   const bad = rows.filter((r) => !r.include && !r.issues.some(([t]) => t === "skip")).length;
-  const missing = ROLES.filter(([k]) => c[k] == null).map(([, l]) => l);
+  const missing = REQUIRED.filter(([k]) => c[k] == null).map(([, l]) => l);
+  const withLoc = c.locationComments != null;
   $("summary").innerHTML =
     (missing.length ? `<span class="pill bad">Choose a column for ${missing.join(" and ")}</span>` : "") +
     `<span class="pill ok">${inc.length} will be submitted</span>` +
@@ -474,13 +522,14 @@ function renderPreview(c) {
     (skipped ? `<span class="pill">${skipped} skipped</span>` : "") +
     (bad ? `<span class="pill bad">${bad} excluded</span>` : "");
 
-  $("preview").innerHTML = `<thead><tr><th>Row</th><th>UTEID</th><th>Notes</th><th>Status</th></tr></thead><tbody>` +
+  $("preview").innerHTML = `<thead><tr><th>Row</th><th>UTEID</th><th>Notes</th>${withLoc ? "<th>Location comments</th>" : ""}<th>Status</th></tr></thead><tbody>` +
     rows.map((r) => {
       const status = r.issues.length
         ? r.issues.map(([t, m]) => `<span class="pill ${t === "skip" ? "" : t}">${escapeHtml(m)}</span>`).join(" ")
         : `<span class="pill ok">ready</span>`;
       return `<tr class="${r.include ? "" : "excluded"}"><td>${r.line}</td><td>${escapeHtml(r.uteid)}</td>` +
-        `<td class="notes">${escapeHtml(r.notes.length > 200 ? r.notes.slice(0, 200) + "…" : r.notes)}</td><td>${status}</td></tr>`;
+        `<td class="notes">${escapeHtml(r.notes.length > 200 ? r.notes.slice(0, 200) + "…" : r.notes)}</td>` +
+        (withLoc ? `<td class="notes">${escapeHtml(r.locationComments)}</td>` : "") + `<td>${status}</td></tr>`;
     }).join("") + "</tbody>";
 }
 
@@ -490,7 +539,10 @@ function renderScript() {
   const c = Object.fromEntries(ROLES.map(([k]) => [k, col(k)]));
   const ready = c.uteid != null && c.notes != null;
   const rows = state.built.filter((r) => r.include).map((r) => {
-    return { key: hash([r.uteid.toLowerCase(), r.notes, $("type").value]), uteid: r.uteid, notes: r.notes };
+    // The key leaves out location comments, so editing them never re-creates an already-submitted contribution.
+    const row = { key: hash([r.uteid.toLowerCase(), r.notes, $("type").value]), uteid: r.uteid, notes: r.notes };
+    if (r.locationComments) row.locationComments = r.locationComments;
+    return row;
   });
   const dry = mode() === "dry";
   $("modeNote").textContent = dry
