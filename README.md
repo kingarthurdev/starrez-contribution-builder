@@ -19,6 +19,8 @@ The sheet is read entirely in your browser. Nothing is uploaded, and the page ha
 
 To preview without creating anything, choose **Dry run** before copying. It prints what it would submit, with each student's name from StarRez.
 
+**Safe mode** (a switch in step 3) looks students up one at a time instead of 10 at once, and changes the pause between residents from 750 ms to 3 seconds. Use it if StarRez seems slow or starts returning errors.
+
 ## What the script does
 
 For each row it:

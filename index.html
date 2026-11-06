@@ -67,6 +67,13 @@
   code { font: 12.5px ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
   .hidden { display: none !important; }
   .note { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+  .switch { display: inline-flex; align-items: center; gap: 10px; font-weight: 400; cursor: pointer; padding: 6px 0; }
+  .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .switch .track { position: relative; width: 38px; height: 22px; border-radius: 999px; background: var(--border); transition: background 0.15s; flex: none; }
+  .switch .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); box-shadow: 0 1px 2px rgba(0,0,0,0.3); transition: transform 0.15s; }
+  .switch input:checked + .track { background: var(--accent); }
+  .switch input:checked + .track::after { transform: translateX(16px); background: #fff; }
+  .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
   .news { font-size: 13px; padding: 12px 14px; border-radius: 10px; background: var(--accent-soft); border: 1px solid var(--border); margin: 0 0 16px; }
   .news ul { margin: 6px 0 0; padding-left: 20px; }
   .callout { font-size: 13px; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); margin-top: 12px; }
@@ -78,8 +85,9 @@
   <p class="lede">Upload a sheet of residents and conversation notes, plus optional location comments. This page builds a script you paste into the console of a logged-in StarRez tab. The script creates one Contribution/Interaction per resident. Your sheet stays in this browser tab and isn't uploaded anywhere.</p>
 
   <div class="news">
-    <strong>New in v1.5</strong>
+    <strong>What's new</strong>
     <ul>
+      <li><b>Safe mode</b> (v1.6): a switch in step 3. The script looks up students one at a time and waits 3 seconds between residents.</li>
       <li><b>Location comments:</b> StarRez now has a Location Comments field (for example, "Jester Upper West - 12th Floor Study Room"). Add a column for it to your sheet and choose it in step 2. It's optional, and StarRez keeps up to 100 characters.</li>
       <li><b>Sub type</b> now defaults to Meaningful Conversation.</li>
       <li>Notes now go only into Description. They're no longer copied into Comments.</li>
@@ -127,6 +135,11 @@
       </label>
       <label class="field">Pause between residents (ms)
         <input type="number" id="delay" value="750" min="0" step="250">
+        <small id="delayNote">Default 750 ms. Safe mode raises it to 3000 ms.</small>
+      </label>
+      <label class="field">Safe mode
+        <span class="switch"><input type="checkbox" id="safe"><span class="track" aria-hidden="true"></span><span id="safeState">Off</span></span>
+        <small>Looks up students one at a time instead of 10 at once, and waits 3 seconds between residents. Slower, but easier on StarRez.</small>
       </label>
     </div>
   </section>
@@ -238,8 +251,9 @@
   if (todo.length < ROWS.length) log(`${ROWS.length - todo.length} already submitted from this browser; skipping them:`, ROWS.filter((r) => done[r.key]).map((r) => `${r.uteid} → contribution ${done[r.key]}`));
   if (!todo.length) return log("Nothing left to submit.");
   // Lookups are read-only, so run several at once. A failed request is retried once before counting as an error.
-  const LOOKUP_CONCURRENCY = 10;
-  log(`Script from builder v__VERSION__. Looking up ${todo.length} students in StarRez, ${LOOKUP_CONCURRENCY} at a time…`);
+  // Safe mode looks students up one at a time.
+  const LOOKUP_CONCURRENCY = CONFIG.safeMode ? 1 : 10;
+  log(`Script from builder v__VERSION__${CONFIG.safeMode ? " (safe mode)" : ""}. Looking up ${todo.length} students in StarRez, ${LOOKUP_CONCURRENCY === 1 ? "one at a time" : `${LOOKUP_CONCURRENCY} at a time`}, then pausing ${CONFIG.delayMs} ms between residents when submitting…`);
   const lookupErrors = [];
   const lookupStart = Date.now();
   let next = 0, finished = 0;
@@ -384,7 +398,7 @@
 <script>
 // Option IDs from the StarRez Contribution edit form.
 // Bump on every change so it's obvious when GitHub Pages is serving the new build.
-const VERSION = "1.5.2";
+const VERSION = "1.6.0";
 document.getElementById("version").textContent = "v" + VERSION;
 
 const TYPES = { 1: "Intentional Conversation - Fall", 2: "Intentional Conversation - Spring", 3: "Intentional Conversation - Summer" };
@@ -563,6 +577,7 @@ function renderScript() {
     locationID: +$("location").value,
     assignee: parseAssignee($("assignee").value) || null,
     delayMs: Math.max(0, +$("delay").value || 0),
+    safeMode: $("safe").checked,
   };
   const now = new Date();
   const fill = {
@@ -570,7 +585,7 @@ function renderScript() {
     __GENERATED_AT__: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`,
     __BATCH_ID__: config.batchId,
     __COUNT__: String(rows.length),
-    __MODE_LABEL__: dry ? "DRY RUN (nothing is submitted)" : "LIVE (creates records)",
+    __MODE_LABEL__: (dry ? "DRY RUN (nothing is submitted)" : "LIVE (creates records)") + (config.safeMode ? " · SAFE MODE" : ""),
     __DRY_RUN__: String(dry),
     __CONFIG__: JSON.stringify(config),
     __ROWS__: JSON.stringify(rows, null, 2).replace(/\n/g, "\n  "),
@@ -587,6 +602,17 @@ function hash(v) {
 }
 
 ["assignee", "type", "subtype", "location", "skip", "delay"].forEach((id) => $(id).addEventListener("input", refresh));
+
+// Safe mode swaps the pause default (750 ms <-> 3000 ms). A pause the user typed in themselves is left alone.
+const DELAY_NORMAL = 750, DELAY_SAFE = 3000;
+$("safe").addEventListener("change", () => {
+  const on = $("safe").checked;
+  const delay = +$("delay").value;
+  if (on && delay === DELAY_NORMAL) $("delay").value = DELAY_SAFE;
+  if (!on && delay === DELAY_SAFE) $("delay").value = DELAY_NORMAL;
+  $("safeState").textContent = on ? "On" : "Off";
+  refresh();
+});
 document.querySelectorAll('input[name="mode"]').forEach((el) => el.addEventListener("change", renderScript));
 
 $("copy").addEventListener("click", async () => {
