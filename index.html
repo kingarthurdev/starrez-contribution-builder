@@ -87,6 +87,7 @@
   <div class="news">
     <strong>What's new</strong>
     <ul>
+      <li><b>Dates</b> (v1.6.2): each contribution is now dated when the script actually submits it, instead of when the script started.</li>
       <li><b>Safe mode</b> (v1.6): a switch in step 3. The script looks up students one at a time and waits 15 seconds between residents. The normal pause is now 4 seconds.</li>
       <li><b>Location comments:</b> StarRez now has a Location Comments field (for example, "Jester Upper West - 12th Floor Study Room"). Add a column for it to your sheet and choose it in step 2. It's optional, and StarRez keeps up to 100 characters.</li>
       <li><b>Sub type</b> now defaults to Meaningful Conversation.</li>
@@ -110,7 +111,7 @@
   <section id="mapSection" class="hidden">
     <h2><span class="step">2</span>Match columns</h2>
     <div class="grid" id="mapGrid"></div>
-    <p class="note">Every row with a UTEID and notes gets one contribution, dated at the time the script runs. If you choose a Location comments column, each row's text goes into that contribution's Location Comments field. Rows with an empty cell leave the field blank.</p>
+    <p class="note">Every row with a UTEID and notes gets one contribution, dated at the moment the script submits it, to the minute. If you choose a Location comments column, each row's text goes into that contribution's Location Comments field. Rows with an empty cell leave the field blank.</p>
   </section>
 
   <section id="settingsSection" class="hidden">
@@ -242,9 +243,10 @@
     return { entryID: Number(tr.dataset.id), starrezName: tr.dataset.caption || "", room: cell(tr, "RoomSpace_Description"), status: cell(tr, "EntryStatusEnum_Abbreviation") };
   };
 
+  // Each contribution is dated when its create request is sent, not when the script started.
+  // StarRez's form works in whole minutes, so seconds are always :00.
   const pad = (n) => String(n).padStart(2, "0");
-  const now = new Date();
-  const runDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:00.000`;
+  const stamp = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00.000`;
 
   // ---- 1. Look up every student (read-only) ----
   const todo = ROWS.filter((r) => !done[r.key]);
@@ -286,7 +288,7 @@
   const newBody = (r, ignore) => ({
     vm: {
       __ChangedFields: ["ContributionDate", "ReportNumber", "Description", "ContributionTypeID", "ContributionSubTypeID", "SelectedEntries", "EntryID", LOCATION_KEY],
-      ContributionDate: runDate,
+      ContributionDate: stamp(),
       ReportNumber: "",
       Description: r.notes + "\r\n",
       ContributionTypeID: String(CONFIG.typeID),
@@ -398,7 +400,7 @@
 <script>
 // Option IDs from the StarRez Contribution edit form.
 // Bump on every change so it's obvious when GitHub Pages is serving the new build.
-const VERSION = "1.6.1";
+const VERSION = "1.6.2";
 document.getElementById("version").textContent = "v" + VERSION;
 
 const TYPES = { 1: "Intentional Conversation - Fall", 2: "Intentional Conversation - Spring", 3: "Intentional Conversation - Summer" };

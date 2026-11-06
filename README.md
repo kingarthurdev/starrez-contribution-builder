@@ -26,7 +26,7 @@ To preview without creating anything, choose **Dry run** before copying. It prin
 For each row it:
 
 1. Finds the student's StarRez entry by UTEID (`EntrySearch/GetSearchResults`).
-2. Creates the contribution (`CampusLife/Contribution/New`) with the date, type, sub type, room location, notes (as Description) and student. StarRez answers with an ignorable "Contribution Entry Required" warning. The script resends with that warning ignored, but only if it's the only warning and it names the student being attached.
+2. Creates the contribution (`CampusLife/Contribution/New`) with the date and time it is submitted (not when the script started), type, sub type, room location, notes (as Description) and student. StarRez answers with an ignorable "Contribution Entry Required" warning. The script resends with that warning ignored, but only if it's the only warning and it names the student being attached.
 3. Sets Room Location, Location Comments and Assigned To (`CampusLife/ContributionMain/EditData`).
 4. Opens the record's page to confirm the student is attached and, if an assignee is set, that the assignment saved.
 
