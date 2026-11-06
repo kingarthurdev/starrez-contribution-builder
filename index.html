@@ -87,7 +87,7 @@
   <div class="news">
     <strong>What's new</strong>
     <ul>
-      <li><b>Safe mode</b> (v1.6): a switch in step 3. The script looks up students one at a time and waits 3 seconds between residents.</li>
+      <li><b>Safe mode</b> (v1.6): a switch in step 3. The script looks up students one at a time and waits 15 seconds between residents. The normal pause is now 4 seconds.</li>
       <li><b>Location comments:</b> StarRez now has a Location Comments field (for example, "Jester Upper West - 12th Floor Study Room"). Add a column for it to your sheet and choose it in step 2. It's optional, and StarRez keeps up to 100 characters.</li>
       <li><b>Sub type</b> now defaults to Meaningful Conversation.</li>
       <li>Notes now go only into Description. They're no longer copied into Comments.</li>
@@ -134,12 +134,12 @@
         <small>Comma or space separated</small>
       </label>
       <label class="field">Pause between residents (ms)
-        <input type="number" id="delay" value="750" min="0" step="250">
-        <small id="delayNote">Default 750 ms. Safe mode raises it to 3000 ms.</small>
+        <input type="number" id="delay" value="4000" min="0" step="500">
+        <small id="delayNote">Default 4000 ms (4 seconds). Safe mode raises it to 15000 ms (15 seconds).</small>
       </label>
       <label class="field">Safe mode
         <span class="switch"><input type="checkbox" id="safe"><span class="track" aria-hidden="true"></span><span id="safeState">Off</span></span>
-        <small>Looks up students one at a time instead of 10 at once, and waits 3 seconds between residents. Slower, but easier on StarRez.</small>
+        <small>Looks up students one at a time instead of 10 at once, and waits 15 seconds between residents. Slower, but easier on StarRez.</small>
       </label>
     </div>
   </section>
@@ -398,7 +398,7 @@
 <script>
 // Option IDs from the StarRez Contribution edit form.
 // Bump on every change so it's obvious when GitHub Pages is serving the new build.
-const VERSION = "1.6.0";
+const VERSION = "1.6.1";
 document.getElementById("version").textContent = "v" + VERSION;
 
 const TYPES = { 1: "Intentional Conversation - Fall", 2: "Intentional Conversation - Spring", 3: "Intentional Conversation - Summer" };
@@ -603,8 +603,8 @@ function hash(v) {
 
 ["assignee", "type", "subtype", "location", "skip", "delay"].forEach((id) => $(id).addEventListener("input", refresh));
 
-// Safe mode swaps the pause default (750 ms <-> 3000 ms). A pause the user typed in themselves is left alone.
-const DELAY_NORMAL = 750, DELAY_SAFE = 3000;
+// Safe mode swaps the pause default (4000 ms <-> 15000 ms). A pause the user typed in themselves is left alone.
+const DELAY_NORMAL = 4000, DELAY_SAFE = 15000;
 $("safe").addEventListener("change", () => {
   const on = $("safe").checked;
   const delay = +$("delay").value;
